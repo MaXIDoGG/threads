@@ -1,3 +1,6 @@
+/* 5. Добавить в программу возможность запуска потоков с разными
+атрибутами (см. пример 2). */
+
 #include <cstdlib>
 #include <iostream>
 #include <cstring>
@@ -6,6 +9,7 @@ using namespace std;
 
 // Количество потоков
 int n = 5;
+pthread_mutex_t mutex;
 
 /* Функция для обработки ошибок */
 void check_error(int err, const string &error_message)
@@ -21,9 +25,8 @@ void check_error(int err, const string &error_message)
 void *thread_job(void *arg)
 {
 	int thread_num = *(int *)arg; // Получаем номер потока
-	cout << "Thread " << thread_num << " is running..." << endl;
 
-	pthread_t current_thread = pthread_self();
+	pthread_t current_thread = pthread_self(); // Получаем текущий поток
 
 	pthread_attr_t current_thread_attr;
 	int err = pthread_getattr_np(current_thread, &current_thread_attr);
@@ -32,12 +35,20 @@ void *thread_job(void *arg)
 	size_t current_stack_size;
 	err = pthread_attr_getstacksize(&current_thread_attr, &current_stack_size);
 	check_error(err, "Getting stack_size failed");
-	cout << "Current stack_size:" << current_stack_size << endl;
 
 	size_t current_guard_size;
 	err = pthread_attr_getguardsize(&current_thread_attr, &current_guard_size);
 	check_error(err, "Getting guard_size failed");
-	cout << "Current guard_size:" << current_guard_size << endl;
+
+	err = pthread_mutex_lock(&mutex);
+	check_error(err, "Locking mutex failed");
+
+	cout << "Thread " << thread_num << " is running..." << endl;
+	cout << "Thread " << thread_num << " stack_size : " << current_stack_size << endl;
+	cout << "Thread " << thread_num << " guard_size : " << current_guard_size << endl;
+
+	err = pthread_mutex_unlock(&mutex);
+	check_error(err, "Unlocking mutex failed");
 	return 0;
 }
 
@@ -62,7 +73,7 @@ int main()
 		err = pthread_attr_setstacksize(&thread_attr, stack_size); // Установка размера стека
 		check_error(err, "Setting stack size attribute failed");
 
-		size_t guard_size = (i + 1) * 1024;
+		size_t guard_size = (i + 5) * 1024;
 		err = pthread_attr_setguardsize(&thread_attr, guard_size); // Установка размера защиты стека
 		check_error(err, "Setting guard size attribute failed");
 

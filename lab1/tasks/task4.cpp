@@ -1,28 +1,48 @@
+/* 4. Оценить стоимость запуска одного потока операционной системой. Изменяя количество операций (можно использовать любую
+арифметическую операцию), которые исполняет функция потока,
+определить такое их количество, чтобы порождение потока было
+оправданным. */
+
 #include <cstdlib>
 #include <iostream>
 #include <cstring>
 #include <pthread.h>
+#include <chrono>
 using namespace std;
+using namespace std::chrono;
 
 // Количество потоков
-int n = 5;
+const int n = 5;
+
+// Количество операций, которые будет выполнять каждый поток
+const int operations_count = 1000000;
 
 /* Функция, которую будет исполнять созданный поток */
 void *thread_job(void *arg)
 {
 	int thread_num = *(int *)arg; // Получаем номер потока
 	cout << "Thread " << thread_num << " is running..." << endl;
+
+	// Выполняем арифметические операции
+	int result = 0;
+	for (int i = 0; i < operations_count; ++i)
+	{
+		result += i * i; // Простая арифметическая операция
+	}
+
+	cout << "Thread " << thread_num << " finished with result: " << result << endl;
 	return 0;
 }
 
 int main()
 {
-	cout << "Введите количество потоков: ";
-	cin >> n;
 	// Массив идентификаторов потоков
 	pthread_t threads[n];
 	int thread_args[n]; // Аргументы для каждого потока
 	int err;
+
+	// Замеряем время создания и завершения потоков
+	auto start = high_resolution_clock::now();
 
 	// Создаём n потоков
 	for (int i = 0; i < n; ++i)
@@ -44,6 +64,11 @@ int main()
 		pthread_join(threads[i], NULL);
 	}
 
+	auto end = high_resolution_clock::now();
+	auto duration = duration_cast<microseconds>(end - start);
+
 	cout << "All threads have finished execution." << endl;
+	cout << "Total time taken: " << duration.count() << " microseconds" << endl;
+
 	return 0;
 }
