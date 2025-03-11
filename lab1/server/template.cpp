@@ -52,6 +52,7 @@ int main()
 		}
 
 		write(client_fd, response, sizeof(response) - 1); /*-1:'\0'*/
+		shutdown(client_fd, SHUT_WR);
 		close(client_fd);
 	}
 }

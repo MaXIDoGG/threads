@@ -9,6 +9,7 @@ using namespace std;
 void *thread_job(void *arg)
 {
 	cout << "Thread is running..." << endl;
+	return 0;
 }
 
 int main()

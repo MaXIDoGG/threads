@@ -1,74 +1,55 @@
-/* 4. Оценить стоимость запуска одного потока операционной системой. Изменяя количество операций (можно использовать любую
-арифметическую операцию), которые исполняет функция потока,
-определить такое их количество, чтобы порождение потока было
-оправданным. */
-
-#include <cstdlib>
-#include <iostream>
-#include <cstring>
+#include <stdio.h>
+#include <stdlib.h>
 #include <pthread.h>
-#include <chrono>
+#include <time.h>
+#include <iostream>
 using namespace std;
-using namespace std::chrono;
 
-// Количество потоков
-const int n = 5;
+// Количество операций, которые выполняет поток
+#define OPERATIONS 1000000
 
-// Количество операций, которые будет выполнять каждый поток
-const int operations_count = 1000000;
-
-/* Функция, которую будет исполнять созданный поток */
-void *thread_job(void *arg)
+// Функция, которую выполняет поток
+void *thread_function(void *arg)
 {
-	int thread_num = *(int *)arg; // Получаем номер потока
-	cout << "Thread " << thread_num << " is running..." << endl;
-
-	// Выполняем арифметические операции
-	int result = 0;
-	for (int i = 0; i < operations_count; ++i)
+	int count = *((int *)arg);
+	int summa = 0;
+	for (int i = 0; i < count; i++)
 	{
-		result += i * i; // Простая арифметическая операция
+		summa += 1;
 	}
+	return NULL;
+}
 
-	cout << "Thread " << thread_num << " finished with result: " << result << endl;
-	return 0;
+// Функция для измерения времени
+double get_time()
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return ts.tv_sec + ts.tv_nsec / 1e9;
 }
 
 int main()
 {
-	// Массив идентификаторов потоков
-	pthread_t threads[n];
-	int thread_args[n]; // Аргументы для каждого потока
-	int err;
+	pthread_t thread;
+	int count;
+	cout << "Enter the number of operations: ";
+	cin >> count;
+	double start_time, end_time;
 
-	// Замеряем время создания и завершения потоков
-	auto start = high_resolution_clock::now();
+	// Измеряем время выполнения операций в одном потоке
+	start_time = get_time();
+	thread_function(&count);
+	end_time = get_time();
+	double single_thread_time = end_time - start_time;
+	printf("Single-threaded execution time: %.6f seconds\n", single_thread_time);
 
-	// Создаём n потоков
-	for (int i = 0; i < n; ++i)
-	{
-		thread_args[i] = i; // Устанавливаем номер потока
-		err = pthread_create(&threads[i], NULL, thread_job, &thread_args[i]);
-		// Если при создании потока произошла ошибка, выводим
-		// сообщение об ошибке и прекращаем работу программы
-		if (err != 0)
-		{
-			cout << "Cannot create a thread " << i << ": " << strerror(err) << endl;
-			exit(-1);
-		}
-	}
-
-	// Ожидаем завершения всех созданных потоков
-	for (int i = 0; i < n; ++i)
-	{
-		pthread_join(threads[i], NULL);
-	}
-
-	auto end = high_resolution_clock::now();
-	auto duration = duration_cast<microseconds>(end - start);
-
-	cout << "All threads have finished execution." << endl;
-	cout << "Total time taken: " << duration.count() << " microseconds" << endl;
+	// Измеряем время создания и завершения потока
+	start_time = get_time();
+	pthread_create(&thread, NULL, thread_function, &count);
+	pthread_join(thread, NULL);
+	end_time = get_time();
+	double thread_creation_time = end_time - start_time - single_thread_time;
+	printf("Thread creation and destruction time: %.6f seconds\n", thread_creation_time);
 
 	return 0;
 }
