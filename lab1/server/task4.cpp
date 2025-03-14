@@ -21,56 +21,52 @@ void *handle_request(void *arg)
 {
 	ThreadData *data = (ThreadData *)arg;
 	int client_fd = data->client_fd;
+	free(data);
 
 	// Логирование
 	printf("Handling request from client %d\n", client_fd);
 
-	// Запуск PHP-скрипта
-	FILE *php_script = popen("php version.php", "r");
+	char buffer[1024];
+	read(client_fd, buffer, sizeof(buffer) - 1);
+
+	// Получение версии PHP
+	FILE *php_script = popen("php -r 'echo PHP_VERSION;'", "r");
 	if (!php_script)
 	{
-		perror("Failed to run PHP script");
-		const char *error_response = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
-		send(client_fd, error_response, strlen(error_response), MSG_NOSIGNAL);
+		perror("Failed to run PHP command");
 		close(client_fd);
-		free(data);
 		return NULL;
 	}
 
-	// Чтение вывода PHP-скрипта
-	char php_output[1024];
-	size_t bytes_read = fread(php_output, 1, sizeof(php_output) - 1, php_script);
-	php_output[bytes_read] = '\0'; // Завершаем строку
+	char php_output[128];
+	fgets(php_output, sizeof(php_output), php_script);
 	pclose(php_script);
 
-	// Формируем HTTP-ответ
-	char http_response[2048];
-	snprintf(http_response, sizeof(http_response),
+	// Создание HTTP-ответа
+	char response[1024];
+	snprintf(response, sizeof(response),
 					 "HTTP/1.1 200 OK\r\n"
-					 "Content-Type: text/plain\r\n\r\n"
-					 "%s",
+					 "Content-Type: text/html; charset=UTF-8\r\n\r\n"
+					 "<!DOCTYPE html><html><head><title>PHP Version</title>"
+					 "<style>body { background-color: #111; color: white; text-align: center; }</style></head>"
+					 "<body><h1>Goodbye, world!</h1><p>PHP Version: %s</p></body></html>\r\n",
 					 php_output);
 
 	// Отправляем HTTP-ответ клиенту
-	if (send(client_fd, http_response, strlen(http_response), MSG_NOSIGNAL) == -1)
+	if (send(client_fd, response, strlen(response), MSG_NOSIGNAL) == -1)
 	{
 		perror("Failed to send to client");
 	}
 
-	// Закрываем соединение
-	if (close(client_fd) == -1)
-	{
-		perror("Failed to close client socket");
-	}
-
-	// Освобождаем память, выделенную для данных потока
-	free(data);
-
+	close(client_fd);
 	return NULL;
 }
 
 int main()
 {
+	pid_t pid = getpid();
+	printf("pid: %u\n", pid);
+
 	int one = 1;
 	struct sockaddr_in svr_addr, cli_addr;
 	socklen_t sin_len = sizeof(cli_addr);
@@ -78,33 +74,26 @@ int main()
 	// Создаем сокет
 	int sock = socket(AF_INET, SOCK_STREAM, 0);
 	if (sock < 0)
-	{
 		err(1, "can't open socket");
-	}
 
-	// Устанавливаем опцию для повторного использования адреса
 	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(int));
 
-	// Настраиваем адрес сервера
 	int port = 8080;
 	svr_addr.sin_family = AF_INET;
 	svr_addr.sin_addr.s_addr = INADDR_ANY;
 	svr_addr.sin_port = htons(port);
 
-	// Привязываем сокет к адресу
 	if (bind(sock, (struct sockaddr *)&svr_addr, sizeof(svr_addr)) == -1)
 	{
 		close(sock);
 		err(1, "Can't bind");
 	}
 
-	// Начинаем слушать входящие соединения
 	listen(sock, 100);
 	printf("Server is listening on port %d...\n", port);
 
 	while (1)
 	{
-		// Принимаем новое соединение
 		int client_fd = accept(sock, (struct sockaddr *)&cli_addr, &sin_len);
 		if (client_fd == -1)
 		{
@@ -114,7 +103,6 @@ int main()
 
 		printf("Got connection from %s:%d\n", inet_ntoa(cli_addr.sin_addr), ntohs(cli_addr.sin_port));
 
-		// Создаем структуру для передачи данных в поток
 		ThreadData *data = (ThreadData *)malloc(sizeof(ThreadData));
 		if (!data)
 		{
@@ -124,7 +112,6 @@ int main()
 		}
 		data->client_fd = client_fd;
 
-		// Создаем поток для обработки запроса
 		pthread_t thread;
 		if (pthread_create(&thread, NULL, handle_request, data) != 0)
 		{
@@ -134,11 +121,9 @@ int main()
 			continue;
 		}
 
-		// Отсоединяем поток, чтобы он завершился самостоятельно
 		pthread_detach(thread);
 	}
 
-	// Закрываем сокет (эта строка никогда не выполнится в данном примере)
 	close(sock);
 	return 0;
 }
