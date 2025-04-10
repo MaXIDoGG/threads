@@ -1,135 +1,119 @@
-#include <iostream>
-#include <vector>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <err.h>
 #include <pthread.h>
-#include <functional>
+#include <queue>
 
-using namespace std;
+#define THREAD_POOL_SIZE 10 // Количество потоков в пуле
 
-pthread_mutex_t mutex;
+// HTTP-ответ
+char response[] = "HTTP/1.1 200 OK\r\n"
+									"Content-Type: text/html; charset=UTF-8\r\n\r\n"
+									"<!DOCTYPE html><html><head><title>Bye-bye baby bye-bye</title>"
+									"<style>body { background-color: #111 }"
+									"h1 { font-size:4cm; text-align: center; color: black;"
+									" text-shadow: 0 0 2mm red}</style></head>"
+									"<body><h1>Goodbye, world!</h1></body></html>\r\n";
 
-struct ThreadData
+// Очередь клиентов
+std::queue<int> clientQueue;
+pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t queue_cond = PTHREAD_COND_INITIALIZER;
+
+// Функция потока из пула
+void *worker_thread(void *arg)
 {
-	const vector<int> *input;
-	vector<int> *output;
-	int start;
-	int end;
-	function<int(int)> mapFunc;
-};
-
-struct ReduceData
-{
-	const vector<int> *input;
-	int start;
-	int end;
-	function<int(int, int)> reduceFunc;
-	int result;
-};
-
-void *mapThread(void *arg)
-{
-	ThreadData *data = (ThreadData *)arg;
-	for (int i = data->start; i < data->end; ++i)
+	while (1)
 	{
-		(*data->output)[i] = data->mapFunc((*data->input)[i]);
-	}
-	return nullptr;
-}
+		int client_fd;
 
-void *reduceThread(void *arg)
-{
-	ReduceData *data = (ReduceData *)arg;
-	data->result = (*data->input)[data->start];
-	for (int i = data->start + 1; i < data->end; ++i)
-	{
-		data->result = data->reduceFunc(data->result, (*data->input)[i]);
-	}
-	return nullptr;
-}
+		// Захват мьютекса
+		pthread_mutex_lock(&queue_mutex);
+		while (clientQueue.empty())
+		{
+			pthread_cond_wait(&queue_cond, &queue_mutex);
+		}
 
-vector<int> parallelMap(const vector<int> &inputArray, function<int(int)> mapFunc, int numThreads)
-{
-	vector<int> outputArray(inputArray.size());
-	pthread_t threads[numThreads];
-	ThreadData threadData[numThreads];
-	int chunkSize = inputArray.size() / numThreads;
-	int remainder = inputArray.size() % numThreads;
-	int start = 0;
+		client_fd = clientQueue.front();
+		clientQueue.pop();
+		pthread_mutex_unlock(&queue_mutex);
 
-	for (int i = 0; i < numThreads; ++i)
-	{
-		int end = start + chunkSize + (i < remainder ? 1 : 0);
-		threadData[i] = {&inputArray, &outputArray, start, end, mapFunc};
-		pthread_create(&threads[i], nullptr, mapThread, &threadData[i]);
-		start = end;
-	}
-	for (int i = 0; i < numThreads; ++i)
-	{
-		pthread_join(threads[i], nullptr);
-	}
-	return outputArray;
-}
+		// Логирование
+		printf("Handling request from client %d\n", client_fd);
 
-int parallelReduce(const vector<int> &inputArray, function<int(int, int)> reduceFunc, int numThreads)
-{
-	if (inputArray.empty())
-		return 0;
-	pthread_t threads[numThreads];
-	ReduceData threadData[numThreads];
-	vector<int> partialResults(numThreads);
-	int chunkSize = inputArray.size() / numThreads;
-	int remainder = inputArray.size() % numThreads;
-	int start = 0;
+		char buffer[1024];
+		read(client_fd, buffer, sizeof(buffer) - 1);
 
-	for (int i = 0; i < numThreads; ++i)
-	{
-		int end = start + chunkSize + (i < remainder ? 1 : 0);
-		threadData[i] = {&inputArray, start, end, reduceFunc, 0};
-		pthread_create(&threads[i], nullptr, reduceThread, &threadData[i]);
-		start = end;
+		if (send(client_fd, response, sizeof(response) - 1, MSG_NOSIGNAL) == -1)
+		{
+			perror("Failed to send to client");
+		}
+
+		if (close(client_fd) == -1)
+		{
+			perror("Failed to close client socket");
+		}
 	}
-	for (int i = 0; i < numThreads; ++i)
-	{
-		pthread_join(threads[i], nullptr);
-		partialResults[i] = threadData[i].result;
-	}
-	int finalResult = partialResults[0];
-	for (int i = 1; i < numThreads; ++i)
-	{
-		finalResult = reduceFunc(finalResult, partialResults[i]);
-	}
-	return finalResult;
+	return NULL;
 }
 
 int main()
 {
-	int size, numThreads;
-	cout << "Enter the size of the array: ";
-	cin >> size;
-	cout << "Enter the number of threads: ";
-	cin >> numThreads;
+	int one = 1;
+	struct sockaddr_in svr_addr, cli_addr;
+	socklen_t sin_len = sizeof(cli_addr);
 
-	vector<int> inputArray(size);
-	for (int i = 0; i < size; ++i)
+	int sock = socket(AF_INET, SOCK_STREAM, 0);
+	if (sock < 0)
+		err(1, "Can't open socket");
+
+	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(int));
+
+	int port = 8080;
+	svr_addr.sin_family = AF_INET;
+	svr_addr.sin_addr.s_addr = INADDR_ANY;
+	svr_addr.sin_port = htons(port);
+
+	if (bind(sock, (struct sockaddr *)&svr_addr, sizeof(svr_addr)) == -1)
 	{
-		inputArray[i] = i + 1;
+		close(sock);
+		err(1, "Can't bind");
 	}
 
-	auto mapFunc = [](int x)
-	{ return x * x; };
-	auto reduceFunc = [](int a, int b)
-	{ return a + b; };
+	listen(sock, 100);
+	printf("Server is listening on port %d...\n", port);
 
-	vector<int> mappedArray = parallelMap(inputArray, mapFunc, numThreads);
-	int reducedResult = parallelReduce(mappedArray, reduceFunc, numThreads);
-
-	cout << "Mapped array: ";
-	for (int val : mappedArray)
+	// Создаем пул потоков
+	pthread_t pool[THREAD_POOL_SIZE];
+	for (int i = 0; i < THREAD_POOL_SIZE; ++i)
 	{
-		cout << val << " ";
+		pthread_create(&pool[i], NULL, worker_thread, NULL);
 	}
-	cout << endl;
 
-	cout << "Reduced result: " << reducedResult << endl;
+	while (1)
+	{
+		int client_fd = accept(sock, (struct sockaddr *)&cli_addr, &sin_len);
+		if (client_fd == -1)
+		{
+			perror("Can't accept");
+			continue;
+		}
 
+		printf("Got connection from %s:%d\n", inet_ntoa(cli_addr.sin_addr), ntohs(cli_addr.sin_port));
+
+		// Кладем клиента в очередь
+		pthread_mutex_lock(&queue_mutex);
+		clientQueue.push(client_fd);
+		pthread_mutex_unlock(&queue_mutex);
+		pthread_cond_signal(&queue_cond); // Сигнал потоку, что есть работа
+	}
+
+	close(sock);
 	return 0;
 }

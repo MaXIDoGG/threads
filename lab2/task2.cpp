@@ -13,6 +13,7 @@ const int TASKS_COUNT = 10;
 int task_list[TASKS_COUNT]; // Массив заданий
 int current_task = 0;				// Указатель на текущее задание
 pthread_mutex_t mutex;			// Мьютекс
+
 void do_task(int task_no)
 {
 	cout << "Task completion" << endl;

@@ -39,17 +39,17 @@ void *thread_job(void *arg)
 		// Захватываем мьютекс для исключительного доступа
 		// к указателю текущего задания (переменная
 		// current_task)
-		err = pthread_mutex_lock(&mutex);
-		if (err != 0)
-			err_exit(err, "Cannot lock mutex");
+		// err = pthread_mutex_lock(&mutex);
+		// if (err != 0)
+		// 	err_exit(err, "Cannot lock mutex");
 		// Запоминаем номер текущего задания, которое будем исполнять
 		task_no = current_task;
 		// Сдвигаем указатель текущего задания на следующее
 		current_task++;
 		// Освобождаем мьютекс
-		err = pthread_mutex_unlock(&mutex);
-		if (err != 0)
-			err_exit(err, "Cannot unlock mutex");
+		// err = pthread_mutex_unlock(&mutex);
+		// if (err != 0)
+		// 	err_exit(err, "Cannot unlock mutex");
 		// Если запомненный номер задания не превышает
 		// количества заданий, вызываем функцию, которая
 		// выполнит задание.
