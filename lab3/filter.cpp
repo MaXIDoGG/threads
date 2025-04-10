@@ -7,7 +7,7 @@
 using namespace cv;
 using namespace std;
 
-/// @brief Функция блюра
+/// @brief Функция размытия
 /// @param inputImage 
 /// @param outputImage 
 /// @param kernelSize 
@@ -70,6 +70,9 @@ void applyBlurFilter(const Mat &inputImage, Mat &outputImage, int kernelSize)
 	}
 }
 
+/// @brief Главная функция
+/// @param argc 
+/// @param argv 
 int main(int argc, char **argv)
 {
 	// Проверка аргументов командной строки
@@ -144,22 +147,6 @@ int main(int argc, char **argv)
 		cerr << "Error: " << e.what() << endl;
 		return EXIT_FAILURE;
 	}
-
-	// Отображение результатов
-	const string inputWin = "Input Image (Press any key to close)";
-	const string outputWin = "Filtered Image (Press any key to close)";
-
-	namedWindow(inputWin, WINDOW_NORMAL);
-	namedWindow(outputWin, WINDOW_NORMAL);
-
-	resizeWindow(inputWin, 800, 600);
-	resizeWindow(outputWin, 800, 600);
-
-	imshow(inputWin, image);
-	imshow(outputWin, filteredImage);
-
-	waitKey(0);
-	destroyAllWindows();
 
 	return EXIT_SUCCESS;
 }
