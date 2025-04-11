@@ -23,12 +23,12 @@ void applyBlurFilter(const Mat &inputImage, Mat &outputImage, int kernelSize)
 	const int radius = kernelSize / 2;
 	outputImage.create(inputImage.size(), inputImage.type());
 
-	#pragma omp parallel for collapse(2) schedule(dynamic)
+	#pragma omp parallel for collapse(2)
 	for (int y = 0; y < inputImage.rows; ++y)
 	{
 		for (int x = 0; x < inputImage.cols; ++x)
 		{
-			Vec3f sum(0, 0, 0);
+			Vec<float, 3> sum(0, 0, 0);
 			int count = 0;
 
 			// Обработка окрестности пикселя
